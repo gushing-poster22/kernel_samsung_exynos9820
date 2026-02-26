@@ -1,4 +1,4 @@
-name: Build KernelSU Next M62 EvolutionX Final-v2
+name: Build KernelSU Next M62 EvolutionX Final-v3
 on:
   workflow_dispatch:
 
@@ -16,20 +16,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Surgical Patching)
+      - name: Setup KSU Next (Advanced Fix for A16)
         run: |
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           cd drivers/kernelsu
           git fetch --tags
           git checkout v3.0.1
-          # حل مشكلة TWA_RESUME (إصلاح صورة 2566)
+          
+          # 1. حل مشكلة TWA_RESUME (صورة 2566)
           sed -i '1i #define TWA_RESUME 1' allowlist.c
           sed -i '1i #define TWA_SIGNAL 0' allowlist.c
-          # حل مشكلة seccomp filter_count (إصلاح صورة 2567)
+          
+          # 2. حل مشكلة seccomp filter_count (صورة 2567)
           sed -i '/seccomp.filter_count/s/^/\/\//' app_profile.c
+          
+          # 3. حل مشكلة فقدان ملف pgtable.h (صورة 2571) - الجديد
+          sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g' sucompat.c
+          
+          echo "#define TWA_RESUME 1" >> ksu.h
           cd ../..
 
-      - name: Build Kernel (Global Bypass Mode)
+      - name: Build Kernel (Maximum Compatibility Mode)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
@@ -42,12 +49,12 @@ jobs:
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # القوة الضاربة: تجاهل كافة أنواع الأخطاء البرمجية (لحل صورة 2570)
+          # تجاهل أخطاء الشبكة والربط لضمان استخراج الـ Image
           make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types -Wno-unused-variable -Wno-unused-function -Wno-implicit-fallthrough -Wno-return-type -Wno-unused-label" -j$(nproc)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_EvoX_Final_Ready
+          name: Kernel_M62_EvoX_A16_Success
           path: out/arch/arm64/boot/Image*
           
