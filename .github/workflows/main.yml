@@ -1,4 +1,4 @@
-name: Build KernelSU Next
+name: Build KernelSU Next for M62
 on:
   workflow_dispatch:
 
@@ -16,29 +16,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl
 
-      - name: Setup KernelSU Next (Direct Method)
+      - name: Setup KernelSU Next
         run: |
-          # دمج الملفات مباشرة في السورس
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
-          # تحويله لنسخة Next إذا لزم الأمر أو الاستمرار مع المستقر
-          
-      - name: Build Kernel
+
+      - name: Build Kernel (M62 Specific)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
           export LD=ld.lld
-          # تنظيف وبناء
           make O=out clean
-          make O=out exynos9820_defconfig
+          # اختيار الملف الصحيح لجهازك من القائمة التي صورتها
+          make O=out exynos9820-f62_defconfig
           make O=out -j$(nproc)
-
-      - name: Check Output
-        run: ls -R out/arch/arm64/boot/
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Image
+          name: Kernel_M62_KSU_Next
           path: out/arch/arm64/boot/Image*
           
