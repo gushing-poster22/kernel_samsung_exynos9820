@@ -1,4 +1,4 @@
-name: Build KernelSU Next M62 EvolutionX Final-v3
+name: Build KernelSU Next M62 EvolutionX Final-v4
 on:
   workflow_dispatch:
 
@@ -16,7 +16,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Advanced Fix for A16)
+      - name: Setup KSU Next (Full Compatibility Patch)
         run: |
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           cd drivers/kernelsu
@@ -30,13 +30,16 @@ jobs:
           # 2. حل مشكلة seccomp filter_count (صورة 2567)
           sed -i '/seccomp.filter_count/s/^/\/\//' app_profile.c
           
-          # 3. حل مشكلة فقدان ملف pgtable.h (صورة 2571) - الجديد
+          # 3. حل مشكلة فقدان ملف pgtable.h (صورة 2571)
           sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g' sucompat.c
+          
+          # 4. حل مشكلة fsnotify_ops (صورة 2583) - الجديد
+          sed -i 's/handle_inode_event/handle_event/g' pkg_observer.c
           
           echo "#define TWA_RESUME 1" >> ksu.h
           cd ../..
 
-      - name: Build Kernel (Maximum Compatibility Mode)
+      - name: Build Kernel (The Final Push)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
@@ -49,12 +52,12 @@ jobs:
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # تجاهل أخطاء الشبكة والربط لضمان استخراج الـ Image
+          # تجاوز تحذيرات الشبكة والربط (KCFLAGS)
           make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types -Wno-unused-variable -Wno-unused-function -Wno-implicit-fallthrough -Wno-return-type -Wno-unused-label" -j$(nproc)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_EvoX_A16_Success
+          name: Kernel_M62_EvoX_A16_Final_v4
           path: out/arch/arm64/boot/Image*
           
