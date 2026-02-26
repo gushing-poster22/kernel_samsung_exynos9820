@@ -1,4 +1,4 @@
-name: Build KernelSU Next Official M62
+name: Build KernelSU Next M62 EvolutionX
 on:
   workflow_dispatch:
 
@@ -16,12 +16,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KernelSU Next
+      - name: Setup KSU Next (Targeting v3.0.1)
         run: |
-          # استخدام المسار الرسمي لـ Next الذي أرسلته أنت
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          cd drivers/kernelsu
+          git fetch --tags
+          git checkout v3.0.1
+          cd ../..
 
-      - name: Build Kernel (Fixing Net Errors)
+      - name: Build Kernel (EvolutionX Optimized)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
@@ -29,12 +32,15 @@ jobs:
           export LD=ld.lld
           make O=out clean
           make O=out exynos9820-f62_defconfig
-          # إضافة باراميترات قوية لتجاهل أخطاء الشبكة (netfilter) التي ظهرت في صورتك
+          # تفعيل ميزات دعم الرومات المعدلة يدوياً
+          scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
+          scripts/config --file out/.config --enable CONFIG_KSU
+          # البناء النهائي مع تجاهل تحذيرات أندرويد 16
           make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types" -j$(nproc)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_Next_Final
+          name: Kernel_M62_Next_EvoX_A16
           path: out/arch/arm64/boot/Image*
           
