@@ -14,25 +14,31 @@ jobs:
       - name: Install Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64
+          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl
 
-      - name: Setup KernelSU Next
+      - name: Setup KernelSU Next (Direct Method)
         run: |
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/main/kernel/setup.sh" | bash -
-
+          # دمج الملفات مباشرة في السورس
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          # تحويله لنسخة Next إذا لزم الأمر أو الاستمرار مع المستقر
+          
       - name: Build Kernel
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # استخدمنا المترجم الافتراضي للنظام هنا
           export CC=clang
           export LD=ld.lld
+          # تنظيف وبناء
+          make O=out clean
           make O=out exynos9820_defconfig
           make O=out -j$(nproc)
+
+      - name: Check Output
+        run: ls -R out/arch/arm64/boot/
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_KSU_Next
-          path: out/arch/arm64/boot/Image.gz-dtb
+          name: Kernel_Image
+          path: out/arch/arm64/boot/Image*
           
