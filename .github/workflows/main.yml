@@ -4,18 +4,17 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # للبدء الفوري
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
         uses: actions/checkout@v3
         with:
           ref: vic
 
-      - name: Install Compatible Tools
+      - name: Install Tools
         run: |
           sudo apt-get update
-          # تثبيت إصدارات محددة متوافقة مع السورس القديم
-          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang-12 lld-12 llvm-12 crossbuild-essential-arm64
+          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64
 
       - name: Setup KernelSU Next
         run: |
@@ -25,9 +24,9 @@ jobs:
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # توجيه النظام لاستخدام المترجم الأقدم المتوافق
-          export CC=clang-12
-          export LD=ld.lld-12
+          # استخدمنا المترجم الافتراضي للنظام هنا
+          export CC=clang
+          export LD=ld.lld
           make O=out exynos9820_defconfig
           make O=out -j$(nproc)
 
