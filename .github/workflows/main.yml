@@ -1,4 +1,4 @@
-name: Build KernelSU Next for M62
+name: Build KernelSU Next M62 Android 16
 on:
   workflow_dispatch:
 
@@ -16,26 +16,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl
 
-      - name: Setup KernelSU Next
+      - name: Setup KernelSU Next (Fixed for A16)
         run: |
-          # دمج KernelSU مع تجاهل أي تضارب في الملفات القديمة
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          # دمج نسخة Next باستخدام السكربت المخصص لها
+          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/main/kernel/setup.sh" | bash -
+          # إضافة تعريفات التوافق يدوياً لتجنب خطأ ksu.o
+          sed -i 's/obj-$(CONFIG_KSU) += kernelsu\//obj-y += kernelsu\//g' drivers/Makefile
 
-      - name: Build Kernel (M62 Fixed)
+      - name: Build Kernel (M62 EvolutionX)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
           export LD=ld.lld
-          # إضافة باراميترات لتجاوز أخطاء التوافق البسيطة
           make O=out clean
           make O=out exynos9820-f62_defconfig
-          # أمر البناء مع تجاهل الأخطاء غير القاتلة (KCPPFLAGS)
-          make O=out KCFLAGS="-Wno-error" -j$(nproc)
+          # استخدام باراميترات خاصة لتجاوز تضارب أندرويد 16
+          make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes" -j$(nproc)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_Ready
+          name: Kernel_M62_Next_A16
           path: out/arch/arm64/boot/Image*
           
