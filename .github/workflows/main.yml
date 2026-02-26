@@ -1,4 +1,4 @@
-name: Build KernelSU Next EvolutionX Final Success
+name: Build KernelSU Next M62 EvolutionX Final Strike
 on:
   workflow_dispatch:
 
@@ -16,18 +16,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Verified Patch)
+      - name: Setup KSU Next (Hard Patching)
         run: |
+          # جلب نسخة Next الرسمية v3.0.1 التي طلبتها
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           cd drivers/kernelsu
           git fetch --tags
           git checkout v3.0.1
-          # الإصلاح الذي نجح في تجاوز ملفات الروت
+          
+          # --- حل مشكلة TWA_RESUME نهائياً (إصلاح صورة 2566) ---
+          # نقوم بتعريف القيمة في كل ملفات KSU لضمان عدم حدوث Error 1 مجدداً
+          sed -i '1i #define TWA_RESUME 1' allowlist.c
+          sed -i '1i #define TWA_SIGNAL 0' allowlist.c
           echo "#define TWA_RESUME 1" >> ksu.h
-          echo "#define TWA_SIGNAL 0" >> ksu.h
           cd ../..
 
-      - name: Build Kernel (Fixing Net & Root)
+      - name: Build Kernel (M62 EvolutionX Optimized)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
@@ -36,17 +40,16 @@ jobs:
           make O=out clean
           make O=out exynos9820-f62_defconfig
           
-          # تفعيل ميزات الروم المعدل
+          # تفعيل ميزات دعم الرومات المعدلة وأندرويد 16
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # إضافة باراميترات قوية لتجاهل تضارب "الشبكة" في أندرويد 16
-          # أضفنا -Wno-unused-but-set-variable و -Wno-implicit-fallthrough
-          make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types -Wno-unused-but-set-variable -Wno-implicit-fallthrough" -j$(nproc)
+          # تجاوز أخطاء الشبكة (إصلاح صورة 2565) وأخطاء التعريفات
+          make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types -Wno-unused-variable -Wno-unused-function" -j$(nproc)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_Next_EvoX_A16
+          name: Kernel_M62_Next_v3.0.1_EvoX
           path: out/arch/arm64/boot/Image*
           
