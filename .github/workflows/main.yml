@@ -1,4 +1,4 @@
-name: Build KernelSU Next M62 EvolutionX Final-v8-Clean
+name: Build KernelSU Next M62 EvolutionX Final-v9
 on:
   workflow_dispatch:
 
@@ -16,22 +16,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Core Patching)
+      - name: Setup KSU Next (Advanced Patching)
         run: |
-          # 1. إعداد الروت والتحقق من الإصدار
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           cd drivers/kernelsu
           git fetch --tags
           git checkout v3.0.1
           
-          # 2. إصلاحات التوافق مع المعالج والأنظمة (حل صور 2567، 2571، 2583)
+          # 1. إصلاحات التوافق السابقة (صور 2567، 2571، 2583)
           sed -i '/seccomp.filter_count/s/^/\/\//' app_profile.c
           sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g' sucompat.c
           sed -i 's/handle_inode_event/handle_event/g' pkg_observer.c
+          
+          # 2. حل خطأ mount.h الجديد (صورة 2596)
+          # نقوم بتغيير المسار من uapi/linux/mount.h إلى linux/mount.h ليجده المترجم
+          sed -i 's/<uapi\/linux\/mount.h>/<linux\/mount.h>/g' su_mount_ns.c
+          
           cd ../..
 
-          # 3. الحقن الشامل لتعريفات TWA (حل لغم السطر 2800 في صورة 2588)
-          # هذا يضمن تعريف المتغير في كل المجلدات بما فيها net و drivers
+          # 3. الحل الشامل لـ TWA_RESUME (صورة 2588)
           find . -name "*.c" -exec sed -i '1i #define TWA_RESUME 1' {} +
           find . -name "*.c" -exec sed -i '1i #define TWA_SIGNAL 0' {} +
 
@@ -42,33 +45,28 @@ jobs:
           export CC=clang
           export LD=ld.lld
           
-          # تنظيف بيئة العمل
           make O=out clean
           make O=out exynos9820-f62_defconfig
           
-          # تفعيل الروت ونظام الملفات
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # 4. أمر البناء "النظيف" (حل صور 2590، 2591، 2592)
-          # العلم -w يخفي التحذيرات الصفراء ليركز المترجم على الإنتاج
-          # تم إضافة -fno-stack-protector و -Wno-unused-result لضمان عبور مرحلة الشبكات
+          # استخدام العلم -w لإسكات التحذيرات والتركيز على البناء (صور 2587، 2592)
           make O=out KCFLAGS="-w -Wno-error -Wno-unused-result -Wno-int-conversion -fno-stack-protector" -j$(nproc)
 
       - name: Verify and Pack
         run: |
-          # التحقق من وجود الملف الناتج قبل الرفع
           if [ -f out/arch/arm64/boot/Image ]; then
-            echo "SUCCESS: Kernel Image generated successfully!"
+            echo "SUCCESS: Kernel Image generated!"
             cp out/arch/arm64/boot/Image .
           else
-            echo "ERROR: Kernel Image not found. Check the logs for actual errors."
+            echo "STILL MISSING: Check the log for any new 'Fatal Error'."
             exit 1
           fi
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_EvoX_Final_V8
+          name: Kernel_M62_EvoX_Final_V9
           path: Image
           
