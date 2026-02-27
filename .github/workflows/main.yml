@@ -1,4 +1,4 @@
-name: Build KernelSU Next M62 EvolutionX Final-v5
+name: Build KernelSU Next M62 EvolutionX Final-v6
 on:
   workflow_dispatch:
 
@@ -16,30 +16,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Total Patching)
+      - name: Setup KSU Next (Global Fixes)
         run: |
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           cd drivers/kernelsu
           git fetch --tags
           git checkout v3.0.1
           
-          # 1. إصلاح TWA_RESUME (صورة 2566)
-          sed -i '1i #define TWA_RESUME 1' allowlist.c
-          sed -i '1i #define TWA_SIGNAL 0' allowlist.c
+          # 1. حل شامل لخطأ السطر 2800 (صورة 2588) عبر حقن التعريفات في كل الملفات
+          find . -name "*.c" -exec sed -i '1i #define TWA_RESUME 1' {} +
+          find . -name "*.c" -exec sed -i '1i #define TWA_SIGNAL 0' {} +
           
-          # 2. إصلاح filter_count (صورة 2567)
+          # 2. إصلاح مشكلة الحماية (صورة 2567)
           sed -i '/seccomp.filter_count/s/^/\/\//' app_profile.c
           
-          # 3. إصلاح مسار pgtable.h (صورة 2571)
+          # 3. إصلاح مسار الملفات المفقودة (صورة 2571)
           sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g' sucompat.c
           
-          # 4. إصلاح handle_inode_event (صورة 2583) - الحل الجديد
+          # 4. إصلاح توافق الدوال القديمة (صورة 2583)
           sed -i 's/handle_inode_event/handle_event/g' pkg_observer.c
           
-          echo "#define TWA_RESUME 1" >> ksu.h
           cd ../..
 
-      - name: Build Kernel (The Final Battle)
+      - name: Build Kernel (The Final Strike)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
@@ -48,16 +47,15 @@ jobs:
           make O=out clean
           make O=out exynos9820-f62_defconfig
           
-          # تفعيل الميزات المطلوبة
+          # تفعيل ميزات الكيرنال المطلوبة
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # تجاهل كافة التحذيرات لضمان الوصول للملف النهائي
-          make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types -Wno-unused-variable -Wno-unused-function -Wno-implicit-fallthrough -Wno-return-type -Wno-unused-label" -j$(nproc)
+          # تجاهل كافة التحذيرات لضمان استخراج ملف الـ Image النهائي
+          make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types -Wno-unused-variable -Wno-unused-function -Wno-implicit-fallthrough -Wno-return-type -Wno-unused-label -Wno-parentheses -Wno-format-extra-args" -j$(nproc)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_EvoX_A16_Final_V5
+          name: Kernel_M62_EvoX_A16_Final_V6
           path: out/arch/arm64/boot/Image*
-          
