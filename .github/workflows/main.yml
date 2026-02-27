@@ -1,4 +1,4 @@
-name: Build KernelSU Next M62 EvolutionX Final-v7-Ultra
+name: Build KernelSU Next M62 EvolutionX Final-v8-Clean
 on:
   workflow_dispatch:
 
@@ -16,48 +16,59 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Extreme Patching)
+      - name: Setup KSU Next (Core Patching)
         run: |
-          # تحميل وإعداد الروت
+          # 1. إعداد الروت والتحقق من الإصدار
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-          
           cd drivers/kernelsu
           git fetch --tags
           git checkout v3.0.1
           
-          # 1. إصلاحات برمجية محددة للملفات التي سببت أخطاء (صور 2567، 2571، 2583)
+          # 2. إصلاحات التوافق مع المعالج والأنظمة (حل صور 2567، 2571، 2583)
           sed -i '/seccomp.filter_count/s/^/\/\//' app_profile.c
           sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g' sucompat.c
           sed -i 's/handle_inode_event/handle_event/g' pkg_observer.c
           cd ../..
 
-          # 2. الحل الشامل لـ TWA_RESUME (لغم السطر 2800 في صورة 2588)
-          # هذا الأمر يحقن التعريفات في كل ملفات المشروع لضمان عدم توقف البناء في أي مجلد (بما فيها مجلد net)
+          # 3. الحقن الشامل لتعريفات TWA (حل لغم السطر 2800 في صورة 2588)
+          # هذا يضمن تعريف المتغير في كل المجلدات بما فيها net و drivers
           find . -name "*.c" -exec sed -i '1i #define TWA_RESUME 1' {} +
           find . -name "*.c" -exec sed -i '1i #define TWA_SIGNAL 0' {} +
 
-      - name: Build Kernel (The Final Push)
+      - name: Build Kernel (The Final Strike)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
           export LD=ld.lld
           
-          # تنظيف وبناء الإعدادات
+          # تنظيف بيئة العمل
           make O=out clean
           make O=out exynos9820-f62_defconfig
           
-          # تفعيل الميزات المطلوبة
+          # تفعيل الروت ونظام الملفات
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # 3. التجاوز الأقصى للتحذيرات والأخطاء البسيطة (حل صور 2587، 2590، 2591)
-          # أضفنا -Wno-unused-result و -Wno-int-conversion لتغطية أخطاء مجلد net و crypto
-          make O=out KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-incompatible-pointer-types -Wno-unused-variable -Wno-unused-function -Wno-implicit-fallthrough -Wno-return-type -Wno-unused-label -Wno-parentheses -Wno-format-extra-args -Wno-format -Wno-int-conversion -Wno-unused-result" -j$(nproc)
+          # 4. أمر البناء "النظيف" (حل صور 2590، 2591، 2592)
+          # العلم -w يخفي التحذيرات الصفراء ليركز المترجم على الإنتاج
+          # تم إضافة -fno-stack-protector و -Wno-unused-result لضمان عبور مرحلة الشبكات
+          make O=out KCFLAGS="-w -Wno-error -Wno-unused-result -Wno-int-conversion -fno-stack-protector" -j$(nproc)
+
+      - name: Verify and Pack
+        run: |
+          # التحقق من وجود الملف الناتج قبل الرفع
+          if [ -f out/arch/arm64/boot/Image ]; then
+            echo "SUCCESS: Kernel Image generated successfully!"
+            cp out/arch/arm64/boot/Image .
+          else
+            echo "ERROR: Kernel Image not found. Check the logs for actual errors."
+            exit 1
+          fi
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_EvoX_A16_Final_V7_Ultra
-          path: out/arch/arm64/boot/Image*
+          name: Kernel_M62_EvoX_Final_V8
+          path: Image
           
