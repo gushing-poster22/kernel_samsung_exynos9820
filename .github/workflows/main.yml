@@ -1,4 +1,4 @@
-name: Build KernelSU Next M62 EvolutionX Final-v9
+name: Build KernelSU Next M62 EvolutionX Final-v10-Victory
 on:
   workflow_dispatch:
 
@@ -16,29 +16,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Advanced Patching)
+      - name: Setup KSU Next (Ultimate Fixes)
         run: |
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           cd drivers/kernelsu
           git fetch --tags
           git checkout v3.0.1
           
-          # 1. إصلاحات التوافق السابقة (صور 2567، 2571، 2583)
+          # إصلاحات التوافق (صور 2571، 2583، 2596)
           sed -i '/seccomp.filter_count/s/^/\/\//' app_profile.c
           sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g' sucompat.c
           sed -i 's/handle_inode_event/handle_event/g' pkg_observer.c
           
-          # 2. حل خطأ mount.h الجديد (صورة 2596)
-          # نقوم بتغيير المسار من uapi/linux/mount.h إلى linux/mount.h ليجده المترجم
+          # حل مشكلة ملف mount.h الذي أوقفنا في الصورة 2596
           sed -i 's/<uapi\/linux\/mount.h>/<linux\/mount.h>/g' su_mount_ns.c
-          
           cd ../..
 
-          # 3. الحل الشامل لـ TWA_RESUME (صورة 2588)
+          # الحقن الشامل لتعريفات TWA لضمان عبور مجلد lib و net (صورة 2588)
           find . -name "*.c" -exec sed -i '1i #define TWA_RESUME 1' {} +
           find . -name "*.c" -exec sed -i '1i #define TWA_SIGNAL 0' {} +
 
-      - name: Build Kernel (The Final Strike)
+      - name: Build Kernel (The Final Output)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
@@ -51,22 +49,23 @@ jobs:
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # استخدام العلم -w لإسكات التحذيرات والتركيز على البناء (صور 2587، 2592)
+          # بناء الكيرنال مع تجاهل تام للتحذيرات لسرعة الاستخراج
           make O=out KCFLAGS="-w -Wno-error -Wno-unused-result -Wno-int-conversion -fno-stack-protector" -j$(nproc)
 
       - name: Verify and Pack
         run: |
-          if [ -f out/arch/arm64/boot/Image ]; then
-            echo "SUCCESS: Kernel Image generated!"
-            cp out/arch/arm64/boot/Image .
+          # هذا السطر سيبحث عن الكيرنال في كل المجلدات الممكنة لضمان العثور عليه
+          find out/arch/arm64/boot/ -name "Image*" -exec cp {} . \;
+          if [ -f Image ]; then
+            echo "CONGRATULATIONS: Kernel Image is Ready!"
           else
-            echo "STILL MISSING: Check the log for any new 'Fatal Error'."
+            echo "FAILED: Still missing the final link."
             exit 1
           fi
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_EvoX_Final_V9
-          path: Image
+          name: Kernel_M62_EvoX_Final_SUCCESS_V10
+          path: Image*
           
