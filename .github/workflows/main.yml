@@ -1,4 +1,4 @@
-name: Build KernelSU Next M62 EvolutionX Final-v11-Bulk
+name: Build KernelSU Next M62 EvolutionX Final-v12-PRO
 on:
   workflow_dispatch:
 
@@ -16,65 +16,56 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm crossbuild-essential-arm64 curl git
 
-      - name: Setup KSU Next (Bulk Patching Strategy)
+      - name: Setup KSU Next (Clean Path Fixes)
         run: |
-          # 1. إعداد الروت الأساسي
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
           cd drivers/kernelsu
           git fetch --tags
           git checkout v3.0.1
           
-          # 2. إصلاحات استباقية للملفات المسببة للمشاكل (صور 2596، 2598)
-          # حل مشكلة mount.h و seccomp_cache.c و seccomp.filter_count
+          # نحن هنا نصلح "المسارات" فقط لأن المترجم لا يستطيع تخمين مسار ملف غير موجود
           sed -i 's/<uapi\/linux\/mount.h>/<linux\/mount.h>/g' su_mount_ns.c
           sed -i '/seccomp.filter_count/s/^/\/\//' app_profile.c
           sed -i 's/handle_inode_event/handle_event/g' pkg_observer.c
-          
-          # حقن مكتبة seccomp مباشرة لحل خطأ SECCOMP_ARCH_NATIVE (صورة 2598)
-          sed -i '1i #include <asm-generic/seccomp.h>' seccomp_cache.c
-          
-          # 3. تعديل مسارات الـ Headers في كل ملفات الروت (صورة 2571)
           find . -name "*.c" -exec sed -i 's/<linux\/pgtable.h>/<asm\/pgtable.h>/g' {} +
           cd ../..
+          # تم إزالة أوامر الحقن العشوائي بـ sed لأننا سنستخدم طريقة المحترفين في الخطوة القادمة
 
-          # 4. استراتيجية "الحقن العالمي" (Global Injection)
-          # نقوم بتعريف كل المتغيرات الناقصة في بداية كل ملف .c في الكيرنال بالكامل
-          # هذا يضمن عدم توقف البناء في net أو lib أو drivers (صور 2588، 2590، 2597)
-          find . -name "*.c" -exec sed -i '1i #define TWA_RESUME 1\n#define TWA_SIGNAL 0\n#ifndef SECCOMP_ARCH_NATIVE\n#define SECCOMP_ARCH_NATIVE AUDIT_ARCH_AARCH64\n#endif' {} +
-
-      - name: Build Kernel (The Global Strike)
+      - name: Build Kernel (Compiler Injection Method)
         run: |
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CC=clang
           export LD=ld.lld
           
-          # تنظيف وبناء الإعدادات
           make O=out clean
           make O=out exynos9820-f62_defconfig
           
-          # تفعيل الميزات
           scripts/config --file out/.config --enable CONFIG_OVERLAY_FS
           scripts/config --file out/.config --enable CONFIG_KSU
           
-          # 5. أمر البناء النهائي مع تجاهل الأخطاء غير الحرجة (تجاوز صور 2592، 2597)
-          # العلم -w يخفي التحذيرات، و -fno-stack-protector يحمي من أخطاء المعالج
-          make O=out KCFLAGS="-w -Wno-error -Wno-implicit-function-declaration -fno-stack-protector" -j$(nproc)
+          # [الضربة الاحترافية]: تعريف كل المتغيرات الناقصة كأعلام للمترجم مباشرة
+          # -DTWA_RESUME=1 و -DTWA_SIGNAL=0 (لحل مشاكل الروت القديمة)
+          # -DSECCOMP_ARCH_NATIVE=137 (137 هو كود معمارية ARM64 في لينكس)
+          # -DSECCOMP_ARCH_NATIVE_NR=1024 (حجم المصفوفة الذي طلبه المترجم في صورة 2599)
+          export PRO_FLAGS="-DTWA_RESUME=1 -DTWA_SIGNAL=0 -DSECCOMP_ARCH_NATIVE=137 -DSECCOMP_ARCH_NATIVE_NR=1024"
+          
+          # دمج أعلامنا الاحترافية مع أوامر التجاهل الصارمة
+          make O=out KCFLAGS="-w -Wno-error -Wno-implicit-function-declaration -fno-stack-protector $PRO_FLAGS" -j$(nproc)
 
       - name: Verify and Pack
         run: |
-          # البحث عن الملف الناتج ونسخه للمجلد الرئيسي
           find out/arch/arm64/boot/ -name "Image*" -exec cp {} . \;
           if [ -f Image ]; then
-            echo "SUCCESS: Kernel compiled after bulk patching!"
+            echo "SUCCESS: Kernel compiled successfully using Pro-Injection!"
           else
-            echo "FAILED: Please check the last few lines of the log for the specific file name."
+            echo "FAILED: Review the final step."
             exit 1
           fi
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_M62_Final_V11_Bulk
+          name: Kernel_M62_Final_V12_PRO
           path: Image*
           
